@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type B = { number: string; lat: number | null; lng: number | null; locationTs: number | null }
 const KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
@@ -13,6 +13,7 @@ const loadMaps = () =>
     s.src = `https://maps.googleapis.com/maps/api/js?key=${KEY}&v=weekly`
     s.async = true
     s.onload = () => res(w.google)
+    s.onerror = () => res(null)
     document.head.appendChild(s)
   }))
 
@@ -27,14 +28,18 @@ export default function GoogleLiveMap({ bus }: { bus: B }) {
   const map = useRef<any>(null)
   const marker = useRef<any>(null)
   const trail = useRef<any>(null)
+  const [failed, setFailed] = useState(false) // Google rejected the key (billing / restriction) -> keyless map
+  const useJs = !!KEY && !failed
   const live = bus.lat != null && bus.lng != null
   const pos = live ? { lat: bus.lat!, lng: bus.lng! } : CAMPUS
 
   // Full Google Maps JS API (needs a free-tier key) — animated marker + trail
   useEffect(() => {
-    if (!KEY || !box.current) return
+    if (!useJs || !box.current) return
     let dead = false
+    ;(window as any).gm_authFailure = () => setFailed(true)
     loadMaps().then((google) => {
+      if (!google) return setFailed(true)
       if (dead || !box.current) return
       if (!map.current) {
         map.current = new google.maps.Map(box.current, { center: pos, zoom: 16, disableDefaultUI: true, zoomControl: true, gestureHandling: "greedy" })
@@ -56,11 +61,11 @@ export default function GoogleLiveMap({ bus }: { bus: B }) {
       }
     })
     return () => { dead = true }
-  }, [pos.lat, pos.lng])
+  }, [pos.lat, pos.lng, useJs])
 
   return (
     <div className="gmap">
-      {KEY ? (
+      {useJs ? (
         <div ref={box} style={{ width: "100%", height: 340 }} />
       ) : (
         // Keyless real Google Map (free, no billing needed)
